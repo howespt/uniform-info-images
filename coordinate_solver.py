@@ -14,18 +14,17 @@ def calculate_areas(coordinate_array):
 
 class CoordinateSolver(object):
   """docstring for CoordinateSolver"""
-  def __init__(self, image=None, mesh_factor=10, density_distribution=None):
+  def __init__(self, image=None, mesh_factor=14, density_distribution=None):
     super(CoordinateSolver, self).__init__()
     self.image = image
-    self.height, self.width, = self.image.shape
+    self.height, self.width, _ = self.image.shape
     self.mesh_factor = mesh_factor
     self.height /= self.mesh_factor
     self.width /= self.mesh_factor
     self.image = self.image[:self.mesh_factor*self.height, :self.mesh_factor*self.width]
     if type(density_distribution) == np.ndarray:
       restricted_density = density_distribution[:self.mesh_factor*self.height, :self.mesh_factor*self.width]
-      target_areas = sum([restricted_density[offset::self.mesh_factor, offset2::self.mesh_factor] \
-        for offset in range(self.mesh_factor) for offset2 in range(self.mesh_factor)])/(self.mesh_factor**2)
+      target_areas = restricted_density
       target_areas = target_areas[:-1, :-1]
     else:
       target_areas = np.indices((self.width-1, self.height-1)).T.astype('float32')
@@ -91,7 +90,7 @@ class CoordinateSolver(object):
     min_total_error = 10**10
     base_eps = 0.0001
     try:
-      while mse > 0.001:
+      while mse > 0.01:
         old_error = self.total_error
         eps = min(base_eps, min(0.01, 0.00001*self.total_error))
         self.areas = calculate_areas(self.coordinates)
@@ -106,6 +105,7 @@ class CoordinateSolver(object):
           print "reached local min!"
           print "total squared error: ", self.total_error
           print "mse: ", min_total_error/(self.height-1)/(self.width-1)
+          break
 
         if self.total_error < min_total_error:
           min_total_error = self.total_error
@@ -128,16 +128,12 @@ class CoordinateSolver(object):
     except KeyboardInterrupt:
       self.update_x(eps)
       self.update_y(eps)
-      return
+      
 
   def update_x(self, eps):
     """Updates x for vertices"""
     x_errors = self.errors*self.x_weights
     x_adjustments = eps*x_errors.sum(axis=1).sum(axis=1).reshape(self.height, self.width)
-    # ipdb.set_trace()
-    # x_errors[:, 0] += x_errors[:, 0]
-    # x_errors[:, -1] += x_errors[:, -1]
-    # x_adjustments = eps*(x_errors[:-1, :-1] + x_errors[1:, :-1] - x_errors[:-1, 1:] - x_errors[1:, 1:])
     self.coordinates[:, :, 0] += x_adjustments[:, :]
     x_lattice_differences = self.coordinates[:, 1:, 0] - self.coordinates[:, :-1, 0]
     min_xld = x_lattice_differences.min()
@@ -159,10 +155,6 @@ class CoordinateSolver(object):
     """Updates y for vertices"""
     y_errors = self.errors*self.y_weights
     y_adjustments = eps*y_errors.sum(axis=1).sum(axis=1).reshape(self.height, self.width)
-    # y_errors = self.errors.copy()
-    # y_errors[0, :] += y_errors[0, :]
-    # y_errors[-1, :] += y_errors[-1, :]
-    # y_adjustments = eps*(y_errors[:-1, :-1] + y_errors[:-1, 1:] - y_errors[1:, :-1] - y_errors[1:, 1:])
     self.coordinates[:, :, 1] += y_adjustments[:, :]
     y_lattice_differences = self.coordinates[1:, :, 1] - self.coordinates[:-1, :, 1]
     min_yld = y_lattice_differences.min()
